@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>回收站 - 書籤檢查小幫手</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .trash-item {
+      display: flex;
+      align-items: center;
+      gap: var(--space-md);
+      padding: var(--space-md);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      margin-bottom: var(--space-sm);
+      transition: all var(--transition-base);
+    }
+    .trash-item:hover {
+      border-color: rgba(108,99,255,0.3);
+      background: var(--bg-card-hover);
+    }
+    .trash-info { flex: 1; min-width: 0; }
+    .trash-title { font-weight: 600; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .trash-url { font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .trash-meta { display: flex; gap: var(--space-md); margin-top: 4px; font-size: 0.7rem; color: var(--text-muted); }
+    .trash-actions { display: flex; gap: var(--space-xs); }
+    
+    .filter-tabs { display: flex; gap: 4px; margin-bottom: var(--space-md); flex-wrap: wrap; }
+    .filter-tab {
+      padding: 5px 14px;
+      border-radius: var(--radius-full);
+      font-size: 0.8rem;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-secondary);
+      transition: all var(--transition-fast);
+      font-family: var(--font-sans);
+    }
+    .filter-tab:hover { background: var(--bg-card); color: var(--text-primary); }
+    .filter-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    
+    .trash-toolbar {
+      display: flex;
+      align-items: center;
+      gap: var(--space-md);
+      margin-bottom: var(--space-md);
+      padding: var(--space-sm) var(--space-md);
+      background: rgba(108,99,255,0.06);
+      border-radius: var(--radius-md);
+    }
+    
+    /* 目錄分組樣式 */
+    .trash-dir-group {
+      margin-bottom: var(--space-md);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      transition: all var(--transition-base);
+    }
+    .trash-dir-group:hover {
+      border-color: rgba(108,99,255,0.15);
+    }
+    .trash-dir-header {
+      display: flex;
+      align-items: center;
+      gap: var(--space-md);
+      padding: var(--space-md) var(--space-lg);
+      background: rgba(108,99,255,0.02);
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+      transition: background var(--transition-base);
+    }
+    .trash-dir-header:hover {
+      background: rgba(108,99,255,0.05);
+    }
+    .trash-dir-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      flex: 1;
+      min-width: 0;
+    }
+    .trash-dir-name {
+      font-weight: 700;
+      font-size: 0.875rem;
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .trash-dir-count {
+      font-size: 0.7rem;
+      background: rgba(108,99,255,0.1);
+      color: var(--primary-light);
+      padding: 1px 7px;
+      border-radius: var(--radius-full);
+      font-weight: 700;
+    }
+    .trash-dir-toggle {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      transition: transform var(--transition-base);
+      font-weight: bold;
+    }
+    .trash-dir-group.collapsed .trash-dir-toggle {
+      transform: rotate(-90deg);
+    }
+    .trash-dir-items {
+      padding: var(--space-md);
+      transition: max-height var(--transition-base);
+    }
+    .trash-dir-group.collapsed .trash-dir-items {
+      display: none;
+    }
+    
+    .trash-dir-items .trash-item {
+      margin-bottom: var(--space-sm);
+      background: rgba(255,255,255,0.01);
+    }
+    .trash-dir-items .trash-item:last-child {
+      margin-bottom: 0;
+    }
+  </style>
+</head>
+<body>
+<div class="page-layout">
+  <nav class="sidebar" id="sidebar"></nav>
+
+  <main class="main-content">
+    <div class="page-header">
+      <div>
+        <h2 class="page-title">🗑️ 回收站</h2>
+        <p class="page-subtitle">恢復或永久刪除書籤項目</p>
+      </div>
+      <div style="display:flex;gap:var(--space-sm)">
+        <div class="search-box" style="width:240px">
+          <input type="text" class="input" id="search-input" placeholder="搜尋回收站內容...">
+        </div>
+        <button class="btn btn-ghost" id="btn-clear-all">清空回收站</button>
+      </div>
+    </div>
+
+    <!-- 篩選標籤 -->
+    <div class="filter-tabs" id="filter-tabs" style="margin-bottom: var(--space-md);">
+      <button class="filter-tab active" data-filter="all">全部</button>
+      <button class="filter-tab" data-filter="duplicate">🔍 重複書籤</button>
+      <button class="filter-tab" data-filter="dead">💀 失效連結</button>
+      <button class="filter-tab" data-filter="unknown">❓ 其他</button>
+    </div>
+
+    <div class="trash-toolbar" id="trash-toolbar" style="display:none">
+      <label class="checkbox-custom">
+        <input type="checkbox" id="select-all">
+        <span>全選所有項目</span>
+      </label>
+      <span id="sel-count" style="font-size:0.8rem;color:var(--text-muted)"></span>
+      <div style="margin-left:auto;display:flex;gap:var(--space-sm)">
+        <button class="btn btn-ghost btn-sm" id="btn-restore-selected" disabled>🔄 恢復所選</button>
+        <button class="btn btn-danger btn-sm" id="btn-clear-selected" disabled>🗑️ 永久刪除</button>
+      </div>
+    </div>
+
+    <div id="trash-list"></div>
+
+    <div class="empty-state" id="empty-state" style="display:none">
+      <div class="empty-icon">🗑️</div>
+      <div class="empty-title">回收站是空的</div>
+      <div class="empty-desc">刪除的書籤會顯示在這裡。</div>
+    </div>
+  </main>
+</div>
+
+<script src="../js/bookmark-utils.js"></script>
+<script src="../js/trash-manager.js"></script>
+<script src="../js/ui-utils.js"></script>
+<script src="trash.js"></script>
+</body>
+</html>

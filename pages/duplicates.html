@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>重複書籤 - 書籤檢查小幫手</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .group-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      margin-bottom: var(--space-md);
+      overflow: hidden;
+      transition: border-color var(--transition-base);
+    }
+    .group-card:hover { border-color: rgba(108,99,255,0.3); }
+
+    .group-header {
+      display: flex;
+      align-items: center;
+      gap: var(--space-md);
+      padding: var(--space-md);
+      background: rgba(108,99,255,0.06);
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .group-key {
+      flex: 1;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .group-count {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    .group-body { padding: var(--space-sm) 0; }
+
+    .dup-item {
+      display: flex;
+      align-items: center;
+      gap: var(--space-md);
+      padding: 10px var(--space-md);
+      transition: background var(--transition-fast);
+    }
+    .dup-item:hover { background: rgba(255,255,255,0.02); }
+    .dup-item.keep { background: rgba(107,203,119,0.05); }
+    .dup-item.keep-badge::before {
+      content: '保留';
+      font-size: 0.65rem;
+      color: var(--success);
+      border: 1px solid var(--success);
+      border-radius: var(--radius-full);
+      padding: 1px 5px;
+      margin-right: 4px;
+    }
+
+    .dup-info { flex: 1; min-width: 0; }
+    .dup-title { font-size: 0.9rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dup-url { font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dup-meta { display: flex; gap: var(--space-sm); margin-top: 2px; align-items: center; flex-wrap: wrap; }
+
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-md);
+      margin-bottom: var(--space-lg);
+    }
+
+    .filter-bar {
+      display: flex;
+      gap: var(--space-sm);
+      margin-bottom: var(--space-md);
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .select-all-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      padding: var(--space-sm) var(--space-md);
+      background: rgba(108,99,255,0.06);
+      border-radius: var(--radius-md);
+      margin-bottom: var(--space-md);
+    }
+
+    /* ---- 統一控制面板 (與失效連結頁面對稱) ---- */
+    .check-config {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-lg);
+      margin-bottom: var(--space-lg);
+    }
+
+    .config-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-md);
+      margin-bottom: var(--space-md);
+    }
+
+    .config-item label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+  </style>
+</head>
+<body>
+<div class="page-layout">
+  <!-- 側邊欄 -->
+  <nav class="sidebar" id="sidebar"></nav>
+
+  <!-- 主內容 -->
+  <main class="main-content">
+    <div class="page-header">
+      <div>
+        <h2 class="page-title">🔍 重複書籤檢測</h2>
+        <p class="page-subtitle">找出並清理重複的書籤項目</p>
+      </div>
+    </div>
+
+    <!-- 設定區 (與失效連結檢測頁面格式完全一致，排在下方而非右上角) -->
+    <div class="check-config">
+      <div class="config-grid">
+        <div class="config-item" style="flex: 1; min-width: 200px; max-width: 320px;">
+          <label>比對模式</label>
+          <select class="input" id="mode-select">
+            <option value="url">完整 URL 比對</option>
+            <option value="domain">網域比對</option>
+            <option value="rootdomain">根網域比對</option>
+          </select>
+        </div>
+        <div class="config-item" style="flex: 1; min-width: 240px; max-width: 400px;">
+          <label>資料夾篩選</label>
+          <select class="input" id="folder-filter">
+            <option value="">全部資料夾</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-primary" id="btn-check">⚡ 開始檢測</button>
+      </div>
+    </div>
+
+    <!-- 統計 -->
+    <div class="stats-row" id="stats-row" style="display:none">
+      <div class="stat-card">
+        <div class="stat-value" id="stat-groups" style="color:#8c7ae6">0</div>
+        <div class="stat-label">👥 重複群組</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-dupes" style="color:#ff4757">0</div>
+        <div class="stat-label">🗑️ 可刪除書籤</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-total" style="color:#00a8ff">0</div>
+        <div class="stat-label">⚠️ 受影響書籤</div>
+      </div>
+    </div>
+
+    <!-- 工具列 -->
+    <div id="toolbar-row" style="display:none">
+      <div class="select-all-row">
+        <label class="checkbox-custom">
+          <input type="checkbox" id="select-all">
+          <span>全選建議刪除項目</span>
+        </label>
+        <span id="selected-count" style="color:var(--text-muted);font-size:0.8rem;margin-left:auto"></span>
+      </div>
+      <div class="filter-bar">
+        <button class="btn btn-ghost btn-sm" id="btn-keep-newest">保留最新版</button>
+        <button class="btn btn-ghost btn-sm" id="btn-keep-oldest">保留最舊版</button>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn btn-danger btn-sm" id="btn-delete-selected" disabled>
+            🗑️ 刪除選取（<span id="delete-count">0</span>）
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 結果清單 -->
+    <div id="results-container">
+      <div class="empty-state" id="empty-state">
+        <div class="empty-icon">🔍</div>
+        <div class="empty-title">點擊「開始檢測」掃描重複書籤</div>
+        <div class="empty-desc">支援完整 URL、網域、根網域三種比對模式</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="../js/bookmark-utils.js"></script>
+<script src="../js/trash-manager.js"></script>
+<script src="../js/ui-utils.js"></script>
+<script src="../js/duplicate-checker.js"></script>
+<script src="duplicates.js"></script>
+</body>
+</html>

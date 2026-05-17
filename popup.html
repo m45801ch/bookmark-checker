@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>書籤檢查小幫手</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <!-- 頂部標題 -->
+  <header class="popup-header">
+    <div class="header-logo">
+      <span class="logo-icon">🔖</span>
+      <div>
+        <h1 class="logo-title">書籤檢查小幫手</h1>
+        <p class="logo-sub">Bookmark Checker Pro</p>
+      </div>
+    </div>
+    <button class="icon-btn" id="btn-settings" title="設定">⚙️</button>
+  </header>
+
+  <!-- 統計卡片列 -->
+  <div class="stats-strip">
+    <div class="stat-item">
+      <div class="stat-n" id="stat-total">—</div>
+      <div class="stat-l">總書籤</div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <div class="stat-n stat-warn" id="stat-dupes">—</div>
+      <div class="stat-l">重複</div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <div class="stat-n stat-danger" id="stat-dead">—</div>
+      <div class="stat-l">已快取失效</div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <div class="stat-n stat-muted" id="stat-trash">—</div>
+      <div class="stat-l">回收站</div>
+    </div>
+  </div>
+
+  <!-- 功能卡片 -->
+  <div class="feature-grid">
+    <button class="feature-card" id="btn-duplicates">
+      <div class="feature-icon">🔍</div>
+      <div class="feature-info">
+        <div class="feature-title">重複書籤</div>
+        <div class="feature-desc">找出並清理重複項目</div>
+      </div>
+      <span class="feature-arrow">›</span>
+    </button>
+
+    <button class="feature-card" id="btn-deadlinks">
+      <div class="feature-icon">💀</div>
+      <div class="feature-info">
+        <div class="feature-title">失效連結</div>
+        <div class="feature-desc">掃描無法訪問的連結</div>
+      </div>
+      <span class="feature-arrow">›</span>
+    </button>
+
+    <button class="feature-card" id="btn-trash">
+      <div class="feature-icon">🗑️</div>
+      <div class="feature-info">
+        <div class="feature-title">回收站</div>
+        <div class="feature-desc">恢復已刪除的書籤</div>
+      </div>
+      <div id="trash-badge" class="feature-badge" style="display:none">0</div>
+      <span class="feature-arrow">›</span>
+    </button>
+
+    <button class="feature-card" id="btn-import-export">
+      <div class="feature-icon">📦</div>
+      <div class="feature-info">
+        <div class="feature-title">匯入 / 匯出</div>
+        <div class="feature-desc">備份或匯入書籤</div>
+      </div>
+      <span class="feature-arrow">›</span>
+    </button>
+  </div>
+
+  <!-- 快速掃描按鈕 -->
+  <div class="quick-section">
+    <button class="quick-btn" id="btn-quick-scan">
+      <span class="quick-icon">⚡</span>
+      <span>快速掃描重複書籤</span>
+    </button>
+  </div>
+
+  <!-- 底部資訊 -->
+  <footer class="popup-footer">
+    <span id="footer-status">準備就緒</span>
+    <span id="footer-version">v1.0.0</span>
+  </footer>
+
+  <script src="js/bookmark-utils.js"></script>
+  <script src="js/trash-manager.js"></script>
+  <script src="js/duplicate-checker.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

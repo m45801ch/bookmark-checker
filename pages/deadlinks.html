@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>失效連結 - 書籤檢查小幫手</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .check-config {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-lg);
+      margin-bottom: var(--space-lg);
+    }
+
+    .config-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-md);
+      margin-bottom: var(--space-md);
+    }
+
+    .config-item label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .progress-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-lg);
+      margin-bottom: var(--space-lg);
+      display: none;
+    }
+
+    .progress-section.visible { display: block; }
+
+    .progress-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: var(--space-sm);
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: var(--space-sm);
+      margin-bottom: var(--space-md);
+    }
+
+    .mini-stat {
+      text-align: center;
+      padding: var(--space-sm);
+      background: var(--bg-card);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      user-select: none;
+    }
+    .mini-stat:hover {
+      border-color: var(--primary);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(108,99,255,0.1);
+    }
+    /* 當前選中狀態 */
+    .mini-stat.active {
+      border-color: var(--primary);
+      background: rgba(108,99,255,0.06);
+      box-shadow: inset 0 0 0 1px var(--primary);
+    }
+
+    .mini-stat .val { font-size: 1.4rem; font-weight: 700; transition: transform 0.2s; }
+    .mini-stat .lbl { font-size: 0.7rem; color: var(--text-muted); margin-top: 2px; }
+
+    .filter-tabs { display: flex; gap: 4px; margin-bottom: var(--space-md); flex-wrap: wrap; }
+    .filter-tab {
+      padding: 5px 14px;
+      border-radius: var(--radius-full);
+      font-size: 0.8rem;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-secondary);
+      transition: all var(--transition-fast);
+      font-family: var(--font-sans);
+    }
+    .filter-tab:hover { background: var(--bg-card); color: var(--text-primary); }
+    .filter-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    .link-item {
+      display: flex;
+      align-items: center;
+      gap: var(--space-md);
+      padding: 12px var(--space-md);
+      border-bottom: 1px solid var(--border);
+      transition: background var(--transition-fast);
+    }
+    .link-item:last-child { border-bottom: none; }
+    .link-item:hover { background: rgba(255,255,255,0.02); }
+
+    .status-chip {
+      padding: 3px 10px;
+      border-radius: var(--radius-full);
+      font-size: 0.75rem;
+      font-weight: 600;
+      white-space: nowrap;
+      flex-shrink: 0;
+      min-width: 80px;
+      text-align: center;
+    }
+    .chip-ok { background: rgba(107,203,119,0.2); color: var(--success); }
+    .chip-error { background: rgba(255,107,107,0.2); color: var(--danger-light); }
+    .chip-redirect { background: rgba(255,217,61,0.2); color: var(--warning); }
+    .chip-timeout { background: rgba(96,96,160,0.2); color: var(--text-muted); }
+
+    .results-list {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .results-toolbar {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      padding: var(--space-md);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+
+    .search-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 200px;
+    }
+    .search-wrap input { padding-left: 30px; }
+    .search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+<div class="page-layout">
+  <!-- 側邊欄 -->
+  <nav class="sidebar" id="sidebar"></nav>
+
+  <!-- 主內容 -->
+  <main class="main-content">
+    <div class="page-header">
+      <div>
+        <h2 class="page-title">💀 失效連結檢查</h2>
+        <p class="page-subtitle">檢測書籤中無法訪問的連結</p>
+      </div>
+    </div>
+
+    <!-- 設定區 -->
+    <div class="check-config">
+      <div class="config-grid">
+        <div class="config-item" style="flex: 1; min-width: 240px; max-width: 400px;">
+          <label>資料夾篩選</label>
+          <select class="input" id="folder-filter"><option value="">全部書籤</option></select>
+        </div>
+        <div class="config-item" style="width: 100px; flex-shrink: 0;">
+          <label>並發數量</label>
+          <input type="number" class="input" id="concurrent" value="5" min="1" max="20">
+        </div>
+        <div class="config-item" style="width: 130px; flex-shrink: 0;">
+          <label>超時時間（秒）</label>
+          <input type="number" class="input" id="timeout" value="10" min="3" max="60">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-primary" id="btn-start">⚡ 開始檢查</button>
+        <button class="btn btn-ghost" id="btn-stop" disabled>⏹ 停止</button>
+        <span id="check-status" style="color:var(--text-muted);font-size:0.875rem"></span>
+      </div>
+    </div>
+
+    <!-- 進度區 -->
+    <div class="progress-section" id="progress-section">
+      <div class="progress-info">
+        <span style="font-weight:600">🔍 檢查進度</span>
+        <span id="progress-text" style="color:var(--text-secondary);font-size:0.85rem">0 / 0</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+      </div>
+      <div style="color:var(--text-muted);font-size:0.78rem;margin-top:6px" id="checking-url">等待中...</div>
+    </div>
+
+    <!-- 整合後的統計過濾按鈕面板 -->
+    <div class="stats-grid" id="stats-grid" style="display:none">
+      <div class="mini-stat active" data-filter="all">
+        <div class="val" id="s-total" style="color:var(--text-primary)">0</div>
+        <div class="lbl">📊 總計</div>
+      </div>
+      <div class="mini-stat" data-filter="ok">
+        <div class="val" id="s-ok" style="color:var(--success)">0</div>
+        <div class="lbl">✅ 正常</div>
+      </div>
+      <div class="mini-stat" data-filter="dead">
+        <div class="val" id="s-dead" style="color:var(--danger)">0</div>
+        <div class="lbl">❌ 失效</div>
+      </div>
+      <div class="mini-stat" data-filter="redirect">
+        <div class="val" id="s-redirect" style="color:var(--warning)">0</div>
+        <div class="lbl">↪️ 重新導向</div>
+      </div>
+      <div class="mini-stat" data-filter="timeout">
+        <div class="val" id="s-timeout" style="color:var(--text-muted)">0</div>
+        <div class="lbl">⏱️ 逾時</div>
+      </div>
+    </div>
+
+    <!-- 結果清單 -->
+    <div class="results-list" id="results-list" style="display:none">
+      <div class="results-toolbar">
+        <label class="checkbox-custom">
+          <input type="checkbox" id="select-all">
+          <span>全選</span>
+        </label>
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="text" class="input" id="search-input" placeholder="搜尋書籤名稱或 URL...">
+        </div>
+        <span id="sel-count" style="color:var(--text-muted);font-size:0.8rem"></span>
+        <button class="btn btn-secondary btn-sm" id="btn-recheck-selected" disabled style="display:flex;align-items:center;gap:4px">🔄 重新檢查選取</button>
+        <button class="btn btn-secondary btn-sm" id="btn-recheck-all" style="display:flex;align-items:center;gap:4px;border:1px solid var(--primary-light);color:var(--primary-light)">🔄 重新檢查全部</button>
+        <button class="btn btn-danger btn-sm" id="btn-del-selected" disabled>🗑️ 刪除選取</button>
+      </div>
+      <div id="list-body"></div>
+    </div>
+
+    <div class="empty-state" id="empty-state">
+      <div class="empty-icon">⚡</div>
+      <div class="empty-title">準備好了！</div>
+      <div class="empty-desc">點擊「開始檢查」掃描所有書籤的連結狀態</div>
+    </div>
+  </main>
+</div>
+
+<script src="../js/bookmark-utils.js"></script>
+<script src="../js/trash-manager.js"></script>
+<script src="../js/ui-utils.js"></script>
+<script src="../js/link-checker.js"></script>
+<script src="deadlinks.js"></script>
+</body>
+</html>
