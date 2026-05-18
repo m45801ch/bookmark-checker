@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "書籤檢查小幫手",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "檢查您的書籤是否有重複或失效的連結，支援匯入匯出與回收站功能。",
   "permissions": [
     "bookmarks",

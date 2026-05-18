@@ -32,7 +32,10 @@ function buildSidebar() {
 let allResults = [];
 let bookmarkMap = {};
 let currentFilter = 'all';
+let selectedFolderFilter = '';
 let selectedItems = new Set();
+let selectedFolders = new Set();
+let allFolders = [];
 
 async function init() {
   buildSidebar();
@@ -56,6 +59,124 @@ async function init() {
 
   document.getElementById('search-input').addEventListener('input', window.UIUtils.debounce(renderList, 300));
 
+  // 🎨 客製化結果資料夾分類選取監聽器 (支援紅色數量字體)
+  const resultTrigger = document.getElementById('select-by-folder-trigger');
+  const resultDropdown = document.getElementById('select-by-folder-dropdown');
+
+  if (resultTrigger && resultDropdown) {
+    // 點擊 trigger 切換展開/收合
+    resultTrigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = resultDropdown.style.display !== 'none';
+      resultDropdown.style.display = isOpen ? 'none' : 'flex';
+      resultTrigger.classList.toggle('active', !isOpen);
+    });
+
+    // 阻止下拉選單內部的點擊事件冒泡
+    resultDropdown.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
+    // 點擊外部關閉
+    document.addEventListener('click', () => {
+      resultDropdown.style.display = 'none';
+      resultTrigger.classList.remove('active');
+    });
+
+    // 選項點擊事件委派
+    resultDropdown.addEventListener('click', (e) => {
+      const item = e.target.closest('.select-item');
+      if (item) {
+        const val = item.dataset.value;
+        handleFolderSelectChange(val);
+        resultDropdown.style.display = 'none';
+        resultTrigger.classList.remove('active');
+      }
+    });
+  }
+
+  // 🎨 自定義多選資料夾下拉選單事件綁定
+  const trigger = document.getElementById('folder-filter-trigger');
+  const dropdown = document.getElementById('folder-filter-dropdown');
+  const folderSearch = document.getElementById('folder-search');
+  const btnSelectAll = document.getElementById('btn-folder-select-all');
+  const btnClearAll = document.getElementById('btn-folder-clear-all');
+  const listContainer = document.getElementById('folder-filter-list');
+
+  if (trigger && dropdown) {
+    // 點擊 trigger 切換展開/收合
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = dropdown.style.display !== 'none';
+      dropdown.style.display = isOpen ? 'none' : 'flex';
+      trigger.classList.toggle('active', !isOpen);
+      if (!isOpen && folderSearch) {
+        folderSearch.value = '';
+        renderFolderDropdownList();
+        folderSearch.focus();
+      }
+    });
+
+    // 阻止下拉選單內部的點擊事件冒泡
+    dropdown.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
+    // 點擊外部關閉
+    document.addEventListener('click', () => {
+      dropdown.style.display = 'none';
+      trigger.classList.remove('active');
+    });
+  }
+
+  if (folderSearch) {
+    folderSearch.addEventListener('input', (e) => {
+      renderFolderDropdownList(e.target.value);
+    });
+  }
+
+  if (btnSelectAll) {
+    btnSelectAll.addEventListener('click', () => {
+      const searchVal = folderSearch ? folderSearch.value.toLowerCase() : '';
+      allFolders.forEach(f => {
+        const pathText = f.path || '根目錄';
+        if (!searchVal || pathText.toLowerCase().includes(searchVal)) {
+          selectedFolders.add(f.id);
+        }
+      });
+      renderFolderDropdownList(searchVal);
+      updateTriggerText();
+    });
+  }
+
+  if (btnClearAll) {
+    btnClearAll.addEventListener('click', () => {
+      const searchVal = folderSearch ? folderSearch.value.toLowerCase() : '';
+      allFolders.forEach(f => {
+        const pathText = f.path || '根目錄';
+        if (!searchVal || pathText.toLowerCase().includes(searchVal)) {
+          selectedFolders.delete(f.id);
+        }
+      });
+      renderFolderDropdownList(searchVal);
+      updateTriggerText();
+    });
+  }
+
+  if (listContainer) {
+    listContainer.addEventListener('change', (e) => {
+      if (e.target.classList.contains('folder-checkbox')) {
+        const folderId = e.target.dataset.id;
+        if (e.target.checked) {
+          selectedFolders.add(folderId);
+        } else {
+          selectedFolders.delete(folderId);
+        }
+        updateTriggerText();
+      }
+    });
+  }
+
   document.getElementById('stats-grid').addEventListener('click', (e) => {
     const tab = e.target.closest('.mini-stat');
     if (tab) {
@@ -78,15 +199,11 @@ async function init() {
 async function loadFolders() {
   try {
     const tree = await window.BookmarkUtils.getBookmarkTree();
-    const folders = window.BookmarkUtils.getFolderTree(tree);
-    const select = document.getElementById('folder-filter');
-    folders.forEach(f => {
-      const opt = document.createElement('option');
-      opt.value = f.id;
-      opt.textContent = '　'.repeat(f.depth) + f.title + ` (${f.childCount})`;
-      select.appendChild(opt);
-    });
-  } catch (e) {}
+    allFolders = window.BookmarkUtils.getFolderTree(tree);
+    renderFolderDropdownList();
+  } catch (e) {
+    console.error('載入資料夾樹失敗：', e);
+  }
 }
 
 async function startCheck() {
@@ -95,6 +212,7 @@ async function startCheck() {
 
   allResults = [];
   selectedItems.clear();
+  selectedFolderFilter = ''; // 重置結果過濾器
   bookmarkMap = {};
 
   // 開始檢查時重設篩選為「全部」
@@ -115,12 +233,13 @@ async function startCheck() {
     const tree = await window.BookmarkUtils.getBookmarkTree();
     let bookmarks = window.BookmarkUtils.getAllBookmarks(tree);
 
-    const folderId = document.getElementById('folder-filter').value;
-    if (folderId) {
-      const folderTitle = document.querySelector(`#folder-filter option[value="${folderId}"]`)?.textContent?.trim();
-      if (folderTitle) {
-        bookmarks = bookmarks.filter(bm => bm.path.includes(folderTitle.replace(/\s*\(\d+\)$/, '').trim()));
-      }
+    // 💡 多選資料夾篩選
+    if (selectedFolders.size > 0) {
+      bookmarks = bookmarks.filter(bm => {
+        return Array.from(selectedFolders).some(folderId => {
+          return isInFolder(bm, folderId, tree);
+        });
+      });
     }
 
     bookmarks.forEach(bm => { bookmarkMap[bm.url] = bm; });
@@ -206,12 +325,26 @@ function renderList() {
     });
   }
 
+  // 保存未進行資料夾過濾前的列表，用以填充下拉選單，避免使用者選中後無法切換
+  const allFilteredBeforeFolder = [...filtered];
+
+  if (selectedFolderFilter) {
+    filtered = filtered.filter(r => {
+      const bm = bookmarkMap[r.url];
+      if (!bm) return false;
+      const itemPath = bm.path || '根目錄';
+      return (itemPath === selectedFolderFilter) || 
+             (selectedFolderFilter !== '根目錄' && itemPath.startsWith(selectedFolderFilter + ' › '));
+    });
+  }
+
   const body = document.getElementById('list-body');
   if (filtered.length === 0) {
     body.innerHTML = `<div class="empty-state" style="padding:40px 20px">
       <div class="empty-icon">🎉</div>
       <div class="empty-title">${currentFilter === 'dead' ? '沒有失效連結！' : '沒有符合條件的結果'}</div>
     </div>`;
+    updateFolderSelect([]); // 清空選單選項
     return;
   }
 
@@ -219,6 +352,16 @@ function renderList() {
     const bm = bookmarkMap[r.url] || { title: r.url, path: '' };
     const { label, type } = window.LinkChecker.getStatusLabel(r);
     const chipClass = {ok:'chip-ok',error:'chip-error',redirect:'chip-redirect',timeout:'chip-timeout'}[type] || 'chip-timeout';
+
+    // 💡 強化錯誤、逾時、導向狀態前置醒目 Badge 標籤
+    let titleBadge = '';
+    if (type === 'timeout') {
+      titleBadge = `<span class="badge badge-warning" style="font-size:0.7rem;padding:1px 6px;margin-right:6px">⏱️ 逾時</span>`;
+    } else if (type === 'error') {
+      titleBadge = `<span class="badge badge-danger" style="font-size:0.7rem;padding:1px 6px;margin-right:6px">❌ 錯誤${r.status ? ' ' + r.status : ''}</span>`;
+    } else if (type === 'redirect') {
+      titleBadge = `<span class="badge badge-primary" style="font-size:0.7rem;padding:1px 6px;margin-right:6px">↪️ 導向 ${r.status}</span>`;
+    }
 
     return `
       <div class="link-item">
@@ -230,8 +373,9 @@ function renderList() {
              width="16" height="16" style="border-radius:3px;flex-shrink:0"
              onerror="this.style.display='none'">
         <div style="flex:1;min-width:0">
-          <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:0.9rem">
-            ${escapeHtml(bm.title)}
+          <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:0.9rem;display:flex;align-items:center;">
+            ${titleBadge}
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(bm.title)}</span>
           </div>
           <div style="font-size:0.75rem;color:var(--text-muted);font-family:var(--font-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
             ${escapeHtml(r.url)}
@@ -257,6 +401,9 @@ function renderList() {
   // 更新「重新檢查全部」按鈕的啟用狀態
   const btnRecheckAll = document.getElementById('btn-recheck-all');
   if (btnRecheckAll) btnRecheckAll.disabled = allResults.length === 0;
+
+  // 動態更新資料夾分類選取下拉選單 (使用未過濾資料夾的列表，以確保能切換回別的資料夾)
+  updateFolderSelect(allFilteredBeforeFolder);
 }
 
 function getDomain(url) { try { return new URL(url).host; } catch { return ''; } }
@@ -618,6 +765,136 @@ async function loadCache() {
       resolve();
     });
   });
+}
+
+function updateFolderSelect(filtered) {
+  const triggerText = document.getElementById('select-by-folder-text');
+  const dropdown = document.getElementById('select-by-folder-dropdown');
+  if (!dropdown) return;
+
+  const pathCounts = new Map();
+  filtered.forEach(r => {
+    const bm = bookmarkMap[r.url];
+    if (bm) {
+      const path = bm.path || '根目錄';
+      pathCounts.set(path, (pathCounts.get(path) || 0) + 1);
+    }
+  });
+
+  const sortedPaths = Array.from(pathCounts.keys()).sort();
+
+  let html = `
+    <div class="select-item ${selectedFolderFilter === '' ? 'selected' : ''}" data-value="">
+      <span>📂 顯示全部資料夾</span>
+    </div>
+  `;
+
+  sortedPaths.forEach(p => {
+    const count = pathCounts.get(p);
+    const isSelected = p === selectedFolderFilter;
+    html += `
+      <div class="select-item ${isSelected ? 'selected' : ''}" data-value="${escapeHtml(p)}">
+        <span class="item-text" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; margin-right: 8px;" title="${escapeHtml(p)}">${escapeHtml(p)}</span>
+        <span class="item-count" style="color: var(--danger); font-weight: bold; font-size: 0.75rem; flex-shrink: 0;">(${count})</span>
+      </div>
+    `;
+  });
+
+  dropdown.innerHTML = html;
+
+  if (triggerText) {
+    if (selectedFolderFilter) {
+      triggerText.textContent = `📂 ${selectedFolderFilter}`;
+    } else {
+      triggerText.textContent = '📂 按資料夾選取...';
+    }
+  }
+}
+
+function handleFolderSelectChange(folderVal) {
+  selectedFolderFilter = folderVal;
+
+  // 清空當前選取，因為切換了篩選資料夾
+  selectedItems.clear();
+  const selectAllCb = document.getElementById('select-all');
+  if (selectAllCb) selectAllCb.checked = false;
+  updateSelCount();
+
+  // 重新渲染清單套用篩選
+  renderList();
+}
+
+function isInFolder(bookmark, folderId, tree) {
+  function findPath(nodes, targetId, path = []) {
+    for (const node of nodes) {
+      if (node.id === targetId) return path;
+      if (node.children) {
+        const found = findPath(node.children, targetId, [...path, node.id]);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  const folderPath = findPath(tree, folderId, []);
+  if (!folderPath) return false;
+
+  function bookmarkInSubtree(nodes, bmId) {
+    for (const node of nodes) {
+      if (node.id === bmId) return true;
+      if (node.children && bookmarkInSubtree(node.children, bmId)) return true;
+    }
+    return false;
+  }
+
+  function findNode(nodes, targetId) {
+    for (const node of nodes) {
+      if (node.id === targetId) return node;
+      if (node.children) {
+        const found = findNode(node.children, targetId);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  const folderNode = findNode(tree, folderId);
+  if (!folderNode || !folderNode.children) return false;
+  return bookmarkInSubtree(folderNode.children, bookmark.id);
+}
+
+function renderFolderDropdownList(filterText = '') {
+  const listContainer = document.getElementById('folder-filter-list');
+  if (!listContainer) return;
+
+  listContainer.innerHTML = allFolders.map(f => {
+    const displayName = f.title || '未命名資料夾';
+    const indent = '\u00A0'.repeat(f.depth * 2);
+    const isMatch = !filterText || displayName.toLowerCase().includes(filterText.toLowerCase());
+
+    if (!isMatch) return '';
+
+    const isChecked = selectedFolders.has(f.id);
+    return `
+      <div class="dropdown-item">
+        <label>
+          <input type="checkbox" class="folder-checkbox" data-id="${f.id}" ${isChecked ? 'checked' : ''} style="margin-right: 6px;">
+          <span>${indent}${escapeHtml(displayName)}</span>
+        </label>
+      </div>
+    `;
+  }).join('');
+}
+
+function updateTriggerText() {
+  const triggerText = document.getElementById('folder-trigger-text');
+  if (!triggerText) return;
+
+  if (selectedFolders.size === 0) {
+    triggerText.textContent = '全部書籤';
+  } else {
+    triggerText.textContent = `已選擇 ${selectedFolders.size} 個資料夾`;
+  }
 }
 
 init();

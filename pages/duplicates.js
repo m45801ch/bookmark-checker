@@ -35,6 +35,7 @@ let duplicateGroups = [];
 let selectedItems = new Set(); // 格式: `${groupIndex}-${itemIndex}`
 let allBookmarks = [];
 let currentMode = 'url';
+let selectedFolderFilter = '';
 
 // ---- 初始化 ----
 async function init() {
@@ -50,6 +51,42 @@ async function init() {
   document.getElementById('btn-delete-selected').addEventListener('click', deleteSelected);
   document.getElementById('btn-keep-newest').addEventListener('click', () => autoSelect('newest'));
   document.getElementById('btn-keep-oldest').addEventListener('click', () => autoSelect('oldest'));
+
+  // 🎨 客製化資料夾分類選取監聽器 (支援紅色數量字體)
+  const trigger = document.getElementById('select-by-folder-trigger');
+  const dropdown = document.getElementById('select-by-folder-dropdown');
+
+  if (trigger && dropdown) {
+    // 點擊 trigger 切換展開/收合
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = dropdown.style.display !== 'none';
+      dropdown.style.display = isOpen ? 'none' : 'flex';
+      trigger.classList.toggle('active', !isOpen);
+    });
+
+    // 阻止下拉選單內部的點擊事件冒泡
+    dropdown.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
+    // 點擊外部關閉
+    document.addEventListener('click', () => {
+      dropdown.style.display = 'none';
+      trigger.classList.remove('active');
+    });
+
+    // 選項點擊事件委派
+    dropdown.addEventListener('click', (e) => {
+      const item = e.target.closest('.select-item');
+      if (item) {
+        const val = item.dataset.value;
+        handleFolderSelectChange(val);
+        dropdown.style.display = 'none';
+        trigger.classList.remove('active');
+      }
+    });
+  }
 
   // 事件委派處理動態生成的元素
   document.getElementById('results-container').addEventListener('click', handleResultsClick);
@@ -81,6 +118,7 @@ async function runCheck() {
   btn.innerHTML = window.UIUtils.createSpinner(14).outerHTML + ' 檢測中...';
 
   selectedItems.clear();
+  selectedFolderFilter = ''; // 重置選取的資料夾篩選器
   const selectAllCb = document.getElementById('select-all');
   if (selectAllCb) selectAllCb.checked = false;
   updateDeleteButton();
@@ -179,22 +217,36 @@ function renderResults() {
     return;
   }
 
-  container.innerHTML = duplicateGroups.map((group, gi) => `
-    <div class="group-card" id="group-${gi}">
-      <div class="group-header" data-gi="${gi}">
-        <span class="collapse-arrow" id="arrow-${gi}">▶</span>
-        <span class="group-key">${escapeHtml(group.key)}</span>
-        <span class="badge badge-danger">${group.items.length} 個重複</span>
-        <span class="group-count">可刪 ${group.items.length - 1} 個</span>
+  container.innerHTML = duplicateGroups.map((group, gi) => {
+    let visibleCount = 0;
+    const itemsHtml = group.items.map((item, ii) => {
+      const itemPath = item.path || '根目錄';
+      const isMatch = !selectedFolderFilter || 
+                      (itemPath === selectedFolderFilter) || 
+                      (selectedFolderFilter !== '根目錄' && itemPath.startsWith(selectedFolderFilter + ' › '));
+      if (isMatch) visibleCount++;
+      return renderDupItem(item, gi, ii, isMatch);
+    }).join('');
+
+    return `
+      <div class="group-card" id="group-${gi}" style="${visibleCount > 0 ? '' : 'display:none !important;'}">
+        <div class="group-header" data-gi="${gi}">
+          <span class="collapse-arrow" id="arrow-${gi}">▶</span>
+          <span class="group-key">${escapeHtml(group.key)}</span>
+          <span class="badge badge-danger">${group.items.length} 個重複</span>
+          <span class="group-count">可刪 ${group.items.length - 1} 個</span>
+        </div>
+        <div class="group-body" id="body-${gi}">
+          ${itemsHtml}
+        </div>
       </div>
-      <div class="group-body" id="body-${gi}">
-        ${group.items.map((item, ii) => renderDupItem(item, gi, ii)).join('')}
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
+
+  updateFolderSelect();
 }
 
-function renderDupItem(item, gi, ii) {
+function renderDupItem(item, gi, ii, isVisible = true) {
   const isFirst = ii === 0;
   const key = `${gi}-${ii}`;
   const isSelected = selectedItems.has(key);
@@ -202,7 +254,7 @@ function renderDupItem(item, gi, ii) {
   const relTime = window.BookmarkUtils.formatRelativeTime(item.dateAdded);
 
   return `
-    <div class="dup-item ${isFirst ? 'keep' : ''}" id="item-${gi}-${ii}">
+    <div class="dup-item ${isFirst ? 'keep' : ''}" id="item-${gi}-${ii}" style="${isVisible ? '' : 'display:none !important;'}">
       <label class="checkbox-custom">
         <input type="checkbox" class="item-check" data-key="${key}"
           ${isFirst ? 'disabled title="預設保留最新版"' : ''}
@@ -291,6 +343,10 @@ function toggleItem(key) {
 function toggleSelectAll(e) {
   const checked = e.target.checked;
   document.querySelectorAll('.item-check:not(:disabled)').forEach(cb => {
+    const dupItem = cb.closest('.dup-item');
+    if (dupItem && (dupItem.style.display === 'none' || dupItem.style.display.includes('none'))) {
+      return;
+    }
     const key = cb.dataset.key;
     if (checked) {
       selectedItems.add(key);
@@ -468,6 +524,68 @@ async function loadCache() {
       resolve();
     });
   });
+}
+
+function updateFolderSelect() {
+  const triggerText = document.getElementById('select-by-folder-text');
+  const dropdown = document.getElementById('select-by-folder-dropdown');
+  if (!dropdown) return;
+
+  const pathCounts = new Map();
+  duplicateGroups.forEach(group => {
+    group.items.forEach((item, ii) => {
+      // 收集非首項（非保留項）的所有重複書籤所屬資料夾並計數
+      if (ii > 0) {
+        const path = item.path || '根目錄';
+        pathCounts.set(path, (pathCounts.get(path) || 0) + 1);
+      }
+    });
+  });
+
+  const sortedPaths = Array.from(pathCounts.keys()).sort();
+
+  let html = `
+    <div class="select-item ${selectedFolderFilter === '' ? 'selected' : ''}" data-value="">
+      <span>📂 顯示全部資料夾</span>
+    </div>
+  `;
+
+  sortedPaths.forEach(p => {
+    const count = pathCounts.get(p);
+    const isSelected = p === selectedFolderFilter;
+    html += `
+      <div class="select-item ${isSelected ? 'selected' : ''}" data-value="${escapeHtml(p)}">
+        <span class="item-text" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; margin-right: 8px;" title="${escapeHtml(p)}">${escapeHtml(p)}</span>
+        <span class="item-count" style="color: var(--danger); font-weight: bold; font-size: 0.75rem; flex-shrink: 0;">(${count})</span>
+      </div>
+    `;
+  });
+
+  dropdown.innerHTML = html;
+
+  if (triggerText) {
+    if (selectedFolderFilter) {
+      triggerText.textContent = `📂 ${selectedFolderFilter}`;
+    } else {
+      triggerText.textContent = '📂 按資料夾選取...';
+    }
+  }
+}
+
+function handleFolderSelectChange(folderVal) {
+  selectedFolderFilter = folderVal;
+  
+  // 清空當前選取，因為切換了篩選資料夾
+  selectedItems.clear();
+  const selectAllCb = document.getElementById('select-all');
+  if (selectAllCb) selectAllCb.checked = false;
+  updateDeleteButton();
+
+  // 重新渲染以套用 CSS 隱藏過濾
+  renderResults();
+  
+  // 重新生成選單以對齊選中狀態
+  updateFolderSelect();
 }
 
 init();

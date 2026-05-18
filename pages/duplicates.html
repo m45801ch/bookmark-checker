@@ -109,11 +109,24 @@
       margin-bottom: var(--space-md);
     }
 
-    .config-item label {
-      display: block;
+    /* 🎨 客製單選下拉選單樣式 */
+    .select-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 8px;
+      border-radius: var(--radius-xs);
+      cursor: pointer;
       font-size: 0.8rem;
-      color: var(--text-secondary);
-      margin-bottom: 4px;
+      transition: background var(--transition-fast);
+      color: var(--text-primary);
+    }
+    .select-item:hover {
+      background: var(--bg-card-hover);
+    }
+    .select-item.selected {
+      background: var(--bg-card-hover);
+      font-weight: 500;
     }
   </style>
 </head>
@@ -180,6 +193,16 @@
         <span id="selected-count" style="color:var(--text-muted);font-size:0.8rem;margin-left:auto"></span>
       </div>
       <div class="filter-bar">
+        <!-- 客製化單選下拉選單以支援紅色數量字體 -->
+        <div class="custom-select" id="select-by-folder-container" style="position: relative; max-width: 180px; width: 100%; user-select: none;">
+          <div class="select-trigger" id="select-by-folder-trigger" style="display: flex; align-items: center; justify-content: space-between; padding: 0 10px; height: 30px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-surface); color: var(--text-primary); cursor: pointer; font-size: 0.8rem; transition: border-color var(--transition-fast);">
+            <span class="trigger-text" id="select-by-folder-text">📂 按資料夾選取...</span>
+            <span class="trigger-arrow" style="font-size: 0.6rem; color: var(--text-muted);">▼</span>
+          </div>
+          <div class="select-dropdown" id="select-by-folder-dropdown" style="display: none; position: absolute; top: calc(100% + 4px); left: auto; right: 0; min-width: 100%; width: max-content; max-width: 480px; z-index: 1000; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-md); padding: 4px; flex-direction: column; gap: 4px; max-height: 380px; overflow-y: auto;">
+            <!-- 動態渲染選項 -->
+          </div>
+        </div>
         <button class="btn btn-ghost btn-sm" id="btn-keep-newest">保留最新版</button>
         <button class="btn btn-ghost btn-sm" id="btn-keep-oldest">保留最舊版</button>
         <div style="margin-left:auto;display:flex;gap:8px">
